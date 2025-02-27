@@ -7,8 +7,8 @@
 #include <stdio.h> 
 #include <math.h> 
 #include "font.h" 
-#include "ws2818b.pio.h"// Biblioteca para controlar matriz de LEDs WS2818B
-#include "hardware/timer.h"
+#include "ws2818b.pio.h"
+#include "hardware/adc.h" 
 
 // Definindo pinos para comunicação I2C
 #define I2C_PORT i2c1   
@@ -26,8 +26,12 @@
 #define MATRIX_PIN 7 // Pino de controle da matriz de LEDs
 #define NUM_LEDS 25  // Número total de LEDs na matriz
 
+#define JOYSTICK_X 26  // Pino do eixo X
+#define JOYSTICK_Y 27  // Pino do eixo Y
+#define JOYSTICK_BUTTON 22 // Botão do Joystick
+
 static uint32_t last_time = 0; // Declaração correta da variável
-uint16_t estado_led = 0;
+uint16_t estado_led = 0, eixo_x, eixo_y;
 bool color = true;
 
 void init_leds() {
@@ -63,24 +67,14 @@ void alternar_leds(uint16_t *estado_led) {
        case 0:
           gpio_put(LED_AZUL, 1); // Acende o LED azul
           gpio_put(LED_VERMELHO, 0); // Apaga o LED vermelho
-          //ssd1306_draw_string(&display, "Gas 50", 10, 50);
-          //ssd1306_send_data(&display); // Envia os dados para atualizar o display
-          //seta1();
           break;
        case 1:
           gpio_put(LED_AZUL, 0); // Apaga o LED azul
           gpio_put(LED_VERMELHO, 1); // Acende o LED vermelho
-          //ssd1306_draw_string(&display, "Gas 25", 10, 50);
-          //ssd1306_send_data(&display); // Envia os dados para atualizar o display
-          //seta2();
           break;
        case 2:
           gpio_put(LED_AZUL, 0); // Apaga o LED azul
           gpio_put(LED_VERMELHO, 0); // Apaga o LED vermelho
-          //ssd1306_fill(&display, !color);
-          //ssd1306_rect(&display, 3, 3, 122, 58, color, !color);
-          //ssd1306_send_data(&display); // Envia os dados para atualizar o display 
-          //seta3();
           break;
        }
        *estado_led = (*estado_led + 1) % 3; // Alterna entre 0, 1 e 2
@@ -96,7 +90,7 @@ void botao_callback(uint gpio, uint32_t eventos) {
         last_time = current_time; // Atualiza o tempo do último evento
         if (gpio == BOTAO_VERDE) { //  Botão A foi pressionado
           gpio_put(LED_VERDE, !gpio_get(LED_VERDE)); // Alterna o LED Verde 
-        } else if (gpio == BOTAO_ALTERNAR) { //  Botão A foi pressionado
+        } else if (gpio == BOTAO_ALTERNAR) { //  Botão B foi pressionado
           alternar_leds(&estado_led);
         }
     }
@@ -112,6 +106,10 @@ void init_buttons() {
     gpio_pull_up(BOTAO_ALTERNAR); // Habilita pull-up no pino 6
     gpio_set_irq_enabled_with_callback(BOTAO_VERDE, GPIO_IRQ_EDGE_FALL, true, botao_callback);
     gpio_set_irq_enabled_with_callback(BOTAO_ALTERNAR, GPIO_IRQ_EDGE_FALL, true, botao_callback);
+    
+    adc_init();
+    adc_gpio_init(JOYSTICK_X);
+    adc_gpio_init(JOYSTICK_Y); 
 }
 
 // Função para converter as posições (x, y) da matriz para um índice do vetor de LEDs
@@ -139,8 +137,7 @@ void update_leds() {
         pio_sm_put_blocking(pio, state_machine, leds[i].red); // Envia valor do componente vermelho
         pio_sm_put_blocking(pio, state_machine, leds[i].green); // Envia valor do componente verde
         pio_sm_put_blocking(pio, state_machine, leds[i].blue); // Envia valor do componente azul
-    }
-    sleep_us(100); // Aguarda 100 microsegundos para estabilizar
+    }   
 }
 // Função de controle inicial da matriz de LEDs
 void init_matrix(uint pin) {
@@ -168,8 +165,8 @@ void turn_off_leds() {
     update_leds();
 }
 
-// Desenhar os números na matriz de LEDs
-void seta1() {  // Função para desenhar o número 0 na matriz de LEDs
+// Desenhar as direções na matriz de LEDs
+void seta1() {  // Função para desenhar uma das direções na matriz de LEDs
     int matrix[5][5][3] = {  // Matriz tridimensional para representar a cor de cada LED (5x5)
         // Cada elemento [linha][coluna][RGB] define a cor de um LED
         {{0, 0, 0}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}},   
@@ -214,61 +211,129 @@ void seta3() {
             set_led_color(position, matrix[row][col][0], matrix[row][col][1], matrix[row][col][2]);
         }}  update_leds();
 }
+void seta4() {
+    int matrix[5][5][3] = {
+        {{0, 0, 0}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}},
+        {{0, 0, 0}, {0, 0, 255}, {0, 0, 255}, {0, 0, 255}, {0, 0, 0}},
+        {{0, 0, 0}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}},
+        {{0, 0, 0}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}},
+        {{0, 0, 0}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}}
+    };
+    for (int row = 0; row < 5; row++) {
+        for (int col = 0; col < 5; col++) {
+            int position = get_led_index(row, col);
+            set_led_color(position, matrix[row][col][0], matrix[row][col][1], matrix[row][col][2]);
+        }}  update_leds();
+}
+void seta5() {
+    int matrix[5][5][3] = {
+        {{0, 0, 0}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}},
+        {{0, 0, 0}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}},
+        {{0, 0, 0}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}},
+        {{0, 0, 0}, {0, 0, 255}, {0, 0, 255}, {0, 0, 255}, {0, 0, 0}},
+        {{0, 0, 0}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}}
+    };
+    for (int row = 0; row < 5; row++) {
+        for (int col = 0; col < 5; col++) {
+            int position = get_led_index(row, col);
+            set_led_color(position, matrix[row][col][0], matrix[row][col][1], matrix[row][col][2]);
+        }}  update_leds();
+}
+void seta6() {
+    int matrix[5][5][3] = {
+        {{0, 0, 255}, {0, 0, 255}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}},
+        {{0, 0, 255}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+        {{0, 0, 255}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}},
+        {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}},
+        {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 255}}
+    };
+    for (int row = 0; row < 5; row++) {
+        for (int col = 0; col < 5; col++) {
+            int position = get_led_index(row, col);
+            set_led_color(position, matrix[row][col][0], matrix[row][col][1], matrix[row][col][2]);
+        }}  update_leds();
+}
+void seta7() {
+    int matrix[5][5][3] = {
+        {{0, 0, 0}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}},
+        {{0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+        {{0, 0, 255}, {0, 0, 255}, {0, 0, 255}, {0, 0, 255}, {0, 0, 255}},
+        {{0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+        {{0, 0, 0}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}}
+    };
+    for (int row = 0; row < 5; row++) {
+        for (int col = 0; col < 5; col++) {
+            int position = get_led_index(row, col);
+            set_led_color(position, matrix[row][col][0], matrix[row][col][1], matrix[row][col][2]);
+        }}  update_leds();
+}
+void seta8() {
+    int matrix[5][5][3] = {
+        {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 255}},
+        {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}},
+        {{0, 0, 255}, {0, 0, 0}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}},
+        {{0, 0, 255}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+        {{0, 0, 255}, {0, 0, 255}, {0, 0, 255}, {0, 0, 0}, {0, 0, 0}}
+    };
+    for (int row = 0; row < 5; row++) {
+        for (int col = 0; col < 5; col++) {
+            int position = get_led_index(row, col);
+            set_led_color(position, matrix[row][col][0], matrix[row][col][1], matrix[row][col][2]);
+        }}  update_leds();
+}
 
-// Variável para controlar o estado do semáforo
-typedef enum {
-    Seta1,
-    Seta2,
-    Seta3
-} Animacao;
+// Atualização do display
+void atualizar_matriz(uint16_t *eixo_x, uint16_t *eixo_y) {
 
-Animacao Estado = Seta1;
-
-// Função de callback do temporizador
-bool repeating_timer_callback(struct repeating_timer *t) {
-
-
-    // Muda o estado do semáforo
-    switch (Estado) {
-        case Seta1:
-            seta1();
-            Estado = Seta2;
-            printf("estado/n");
-            break;
-        case Seta2:
-            seta2();
-            Estado = Seta3;
-            printf("estado2/n");
-            break;
-        case Seta3:
-            seta3();
-            Estado = Seta1;
-            printf("estado3/n");
-            break;
+    if (*eixo_x < 1900) {
+      if ((*eixo_y < 2400) && (*eixo_y > 1800)){
+        seta1();
+      } else if (*eixo_y > 2400){
+        seta2();
+      } else if (*eixo_y < 2400){
+        seta3();
+      }
+    } else if ((*eixo_x < 2400) && (*eixo_x > 1800)){
+      if (*eixo_y > 2400){
+        seta4();
+      } else if (*eixo_y < 1900){
+        seta5();
+      }
+    } else if (*eixo_x > 2400){
+      if (*eixo_y > 2400){
+        seta6();
+      } else if ((*eixo_y < 2400) && (*eixo_y > 1800)){
+        seta7();
+      } else if (*eixo_y < 2400){
+        seta8();
+      }
     }
+}
 
-    return true; // Continua o temporizador
+// Leitura dos valores do joystick
+void ler_joystick(uint16_t *eixo_x, uint16_t *eixo_y) {
+    adc_select_input(0);
+    sleep_us(20);
+    *eixo_x = adc_read();
+    adc_select_input(1);
+    sleep_us(20);
+    *eixo_y = adc_read();
 }
 
 int main() {
-    init_matrix(MATRIX_PIN);// Configura controle na matriz
-    // Inicializa a biblioteca padrão da Pico
-    stdio_init_all();
+    init_matrix(MATRIX_PIN); // Configura controle na matriz
+    stdio_init_all(); // Inicializa a biblioteca padrão da Pico
     init_leds();
     init_buttons();
-    init_display();        // Inicializa o display
+    init_display(); // Inicializa o display
     bool color = true; // Declarado corretamente antes de seu uso
     int contador = 0;
     char texto[16];
 
-     // Configura o temporizador para 3 segundos
-    struct repeating_timer timer;
-    add_repeating_timer_ms(3000, repeating_timer_callback, NULL, &timer);
-
     // Exibição inicial no display OLED
-    ssd1306_fill(&display, !color);                             // Limpa o display preenchendo com a cor oposta ao valor atual de "color"
-    ssd1306_rect(&display, 3, 3, 122, 58, color, !color);        // Desenha um retângulo com bordas dentro das coordenadas especificadas
-    ssd1306_send_data(&display);                         // Envia os dados para atualizar o display
+    ssd1306_fill(&display, !color); // Limpa o display preenchendo com a cor oposta ao valor atual de "color"
+    ssd1306_rect(&display, 3, 3, 122, 58, color, !color); // Desenha um retângulo com bordas dentro das coordenadas especificadas
+    ssd1306_send_data(&display); // Envia os dados para atualizar o display
 
     // Desliga todos os LEDs inicialmente
     gpio_put(LED_VERDE, 0);
@@ -277,33 +342,31 @@ int main() {
 
     while (true) {
 
+      ler_joystick(&eixo_x, &eixo_y);
+      atualizar_matriz(&eixo_x, &eixo_y);
+
       fflush(stdout); // Certifica-se de que o buffer de saída seja limpo antes de aguardar a entrada
-      ssd1306_fill(&display, !color);                             // Limpa o display preenchendo com a cor oposta ao valor atual de "color"
+      ssd1306_fill(&display, !color); // Limpa o display preenchendo com a cor oposta ao valor atual de "color"
       ssd1306_rect(&display, 3, 3, 122, 58, color, !color); 
 
       if (gpio_get(LED_VERDE)){
         ssd1306_draw_string(&display, "MM On", 10, 10);
-        //ssd1306_send_data(&display); // Envia os dados para atualizar o display
       } else {
         snprintf(texto, sizeof(texto), "%d km|h", contador);
         ssd1306_draw_string(&display, texto, 45, 25);
       }
 
-      ssd1306_send_data(&display);  // Atualiza o display
+      ssd1306_send_data(&display); // Atualiza o display
 
       if (gpio_get(LED_AZUL)){
         ssd1306_draw_string(&display, "Gas 5L", 10, 50);
-        //ssd1306_send_data(&display); // Envia os dados para atualizar o display
       } else if (gpio_get(LED_VERMELHO)){
         ssd1306_draw_string(&display, "Gas 2L", 10, 50);
-        //ssd1306_send_data(&display); // Envia os dados para atualizar o display
       } else {
-        //ssd1306_fill(&display, !color);
-        ssd1306_rect(&display, 3, 3, 122, 58, color, !color);
-        //ssd1306_send_data(&display); // Envia os dados para atualizar o display
+        ssd1306_rect(&display, 3, 3, 122, 58, color, !color); 
       }
    
-      ssd1306_send_data(&display);  // Atualiza o display
+      ssd1306_send_data(&display); // Envia os dados para atualizar o display
                       
       contador++;
       if (contador > 100) {  
