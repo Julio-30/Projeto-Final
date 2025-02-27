@@ -59,6 +59,7 @@ target_link_libraries(painel
         pico_stdlib
         hardware_pio
         hardware_i2c
+        hardware_adc
         )
 
 pico_add_extra_outputs(painel)
